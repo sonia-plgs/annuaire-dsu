@@ -557,23 +557,6 @@ function renderGrid(list){
 }
 
 /* ---------- carte ---------- */
-function ensureMap(){
-  if(state.map){
-    state.map.invalidateSize();
-    return;
-  }
-  // Petit délai pour que le DOM ait fini d'afficher le conteneur
-  const mapEl = document.getElementById("map");
-  mapEl.style.height = "72vh";
-  state.map = L.map("map", {scrollWheelZoom:true, preferCanvas:true});
-  state.map.setView([46.8, 2.3], 6);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    maxZoom:19
-  }).addTo(state.map);
-  state.layer = L.layerGroup().addTo(state.map);
-  setTimeout(()=>state.map.invalidateSize(), 100);
-}
 
 // Cache géocodage pour éviter les requêtes répétées
 const _geocache = {};
@@ -600,30 +583,53 @@ async function geocode(p){
 }
 
 async function renderMap(list){
-  ensureMap();
-  state.layer.clearLayers();
-
-  // Forcer Leaflet à recalculer la taille du conteneur
-  state.map.invalidateSize();
-
-  const bounds = [];
-  const usedThemes = new Set();
-
-  // Indicateur de chargement
   const mapWrap = document.getElementById("mapWrap");
+
+  // Détruire l'instance Leaflet précédente proprement
+  if(state.map){
+    state.map.remove();
+    state.map = null;
+    state.layer = null;
+  }
+
+  // Recréer un élément #map vierge (Leaflet garde des traces dans le DOM)
+  const oldMap = document.getElementById("map");
+  const newMap = document.createElement("div");
+  newMap.id = "map";
+  newMap.style.cssText = "height:72vh;min-height:480px;width:100%;background:#dfeaed;border-radius:14px";
+  oldMap.replaceWith(newMap);
+
+  // Indicateur de chargement pendant le géocodage
   const loader = document.createElement("div");
-  loader.id = "mapLoader";
   loader.style.cssText = "position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:1000;background:rgba(255,255,255,.92);padding:6px 16px;border-radius:20px;font-size:.85rem;color:#023c48;box-shadow:0 2px 8px rgba(0,0,0,.15)";
   loader.textContent = "Géolocalisation en cours…";
   mapWrap.appendChild(loader);
 
-  await Promise.all(list.map(async p=>{
+  // Géocoder d'abord tous les partenaires, AVANT d'initialiser la carte
+  const results = await Promise.all(list.map(async p => {
     const coords = await geocode(p);
+    return { p, coords };
+  }));
+  loader.remove();
+
+  // Initialiser Leaflet maintenant que le conteneur est visible et dimensionné
+  state.map = L.map("map", { scrollWheelZoom:true });
+  state.map.setView([46.8, 2.3], 6);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    maxZoom:19
+  }).addTo(state.map);
+  state.layer = L.layerGroup().addTo(state.map);
+
+  const bounds = [];
+  const usedThemes = new Set();
+
+  results.forEach(({p, coords}) => {
     if(!coords) return;
     const c = state.themeColors[p.theme];
     usedThemes.add(p.theme);
-    const m = L.circleMarker([coords.lat, coords.lng],{
-      radius:8, fillColor:c, color:"#fff", weight:2, fillOpacity:.92
+    const m = L.circleMarker([coords.lat, coords.lng], {
+      radius:9, fillColor:c, color:"#fff", weight:2, fillOpacity:.92
     });
     const deptLabel = p.deptCode && DEPTS[p.deptCode] ? DEPTS[p.deptCode][0]+" ("+p.deptCode+")" : p.departement;
     const pop = `<div class="pop">
@@ -639,9 +645,7 @@ async function renderMap(list){
     m.bindPopup(pop);
     m.addTo(state.layer);
     bounds.push([coords.lat, coords.lng]);
-  }));
-
-  loader.remove();
+  });
 
   // légende
   const legend = document.getElementById("legend");
@@ -649,12 +653,9 @@ async function renderMap(list){
     .map(t=>`<div class="li"><span class="dot" style="background:${state.themeColors[t]}"></span>${esc(t)}</div>`).join("");
   legend.style.display = usedThemes.size ? "block" : "none";
 
-  state.map.invalidateSize();
   if(bounds.length){
-    state.map.fitBounds(bounds,{padding:[50,50],maxZoom:13});
+    state.map.fitBounds(bounds, {padding:[50,50], maxZoom:13});
   }
-  setTimeout(()=>state.map.invalidateSize(), 300);
-  setTimeout(()=>state.map.invalidateSize(), 800);
 }
 
 /* ---------- bascule de vue ---------- */
@@ -666,14 +667,8 @@ function setView(v){
   document.getElementById("btnList").setAttribute("aria-selected",isList);
   document.getElementById("btnMap").setAttribute("aria-selected",isMap);
   document.getElementById("grid").style.display = isList ? "grid" : "none";
-  const mapWrap = document.getElementById("mapWrap");
-  mapWrap.style.display = isMap ? "block" : "none";
-  if(isMap){
-    // Double rAF : garantit que le navigateur a peint le conteneur avant Leaflet
-    requestAnimationFrame(()=>{
-      requestAnimationFrame(()=>{ renderMap(filtered()); });
-    });
-  }
+  document.getElementById("mapWrap").style.display = isMap ? "block" : "none";
+  if(isMap) renderMap(filtered());
 }
 
 /* ---------- écouteurs ---------- */
