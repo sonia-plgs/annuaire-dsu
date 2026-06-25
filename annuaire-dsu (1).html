@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Annuaire DSU — Groupe Polylogis</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Livvic:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" integrity="sha512-h9FcoyWjHcOcmEVkxOfTLnmZFWIH0iZhZT1H2TbOq55xssQGEJHEaIm+PgoUaZbRvQTNTluNOEfb1ZRy6D3BOw==" crossorigin="anonymous" referrerpolicy="no-referrer">
+
+<style>
+  :root{
+    --teal:#023C48;
+    --teal-700:#0A4E5C;
+    --teal-50:#E6EEF0;
+    --orange:#EF7C45;
+    --orange-600:#E0662C;
+    --sky:#80C3E2;
+    --sky-50:#EAF5FA;
+    --ink:#0E2A30;
+    --muted:#5C7077;
+    --line:#DCE6E8;
+    --bg:#F4F8F9;
+    --card:#FFFFFF;
+    --shadow:0 1px 2px rgba(2,60,72,.06), 0 8px 24px rgba(2,60,72,.07);
+    --radius:14px;
+  }
+
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:Verdana, Geneva, Tahoma, sans-serif;
+    background:var(--bg);
+    color:var(--ink);
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3,.font-display{font-family:"Livvic", Verdana, sans-serif;}
+
+  a{color:var(--teal);text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  /* ---------- Header ---------- */
+  header.topbar{
+    background:var(--teal);
+    color:#fff;
+    position:sticky;top:0;z-index:1000;
+    border-bottom:3px solid var(--orange);
+  }
+  .topbar-inner{
+    max-width:1280px;margin:0 auto;padding:14px 22px;
+    display:flex;align-items:center;gap:18px;flex-wrap:wrap;
+  }
+  .brand{display:flex;align-items:center;gap:12px;min-width:0}
+  .brand .mark{
+    width:42px;height:42px;border-radius:11px;flex:none;
+    background:linear-gradient(135deg,var(--orange),#f59a6e);
+    display:grid;place-items:center;color:#fff;
+    font-family:"Livvic";font-weight:700;font-size:19px;
+    box-shadow:0 4px 12px rgba(239,124,69,.4);
+  }
+  .brand .titles{min-width:0}
+  .brand h1{font-size:19px;font-weight:700;margin:0;letter-spacing:.2px;line-height:1.15}
+  .brand .sub{font-size:11.5px;color:var(--sky);margin-top:1px;letter-spacing:.3px}
+  .topbar-spacer{flex:1}
+
+  /* segmented view toggle */
+  .seg{display:inline-flex;background:rgba(255,255,255,.12);border-radius:11px;padding:3px;gap:2px}
+  .seg button{
+    border:0;background:transparent;color:#cfe6ef;cursor:pointer;
+    font-family:"Livvic";font-weight:600;font-size:13px;
+    padding:7px 16px;border-radius:8px;display:flex;align-items:center;gap:7px;
+    transition:all .18s ease;
+  }
+  .seg button svg{width:15px;height:15px}
+  .seg button.active{background:#fff;color:var(--teal)}
+  .seg button:not(.active):hover{color:#fff}
+
+  /* ---------- Layout ---------- */
+  main{max-width:1280px;margin:0 auto;padding:22px}
+
+  /* demo banner */
+  .banner{
+    background:var(--sky-50);border:1px solid #BBDDEC;border-left:4px solid var(--sky);
+    color:#1d4f63;border-radius:12px;padding:12px 16px;margin-bottom:18px;
+    font-size:13px;display:flex;gap:11px;align-items:flex-start;
+  }
+  .banner svg{width:18px;height:18px;flex:none;margin-top:1px;color:var(--teal)}
+  .banner b{color:var(--teal)}
+  .banner.error{background:#FDEDE8;border-color:#F6C3B0;border-left-color:var(--orange);color:#8a3411}
+  .banner.error svg{color:var(--orange-600)}
+  .banner code{background:#fff;border:1px solid var(--line);padding:1px 6px;border-radius:5px;font-size:12px}
+
+  /* ---------- Controls ---------- */
+  .controls{
+    background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    box-shadow:var(--shadow);padding:18px 18px 14px;margin-bottom:18px;
+  }
+  .search-row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+  .search{position:relative;flex:1;min-width:240px}
+  .search svg{position:absolute;left:14px;top:50%;transform:translateY(-50%);width:18px;height:18px;color:var(--muted)}
+  .search input{
+    width:100%;padding:12px 14px 12px 42px;border:1px solid var(--line);
+    border-radius:11px;font-family:inherit;font-size:14px;color:var(--ink);background:#fff;
+    transition:border-color .15s, box-shadow .15s;
+  }
+  .search input:focus{outline:none;border-color:var(--sky);box-shadow:0 0 0 3px var(--sky-50)}
+
+  .selects{display:flex;gap:10px;flex-wrap:wrap}
+  .field{display:flex;flex-direction:column;gap:4px}
+  .field label{font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);font-weight:700;padding-left:2px}
+  select{
+    appearance:none;-webkit-appearance:none;
+    padding:10px 36px 10px 13px;border:1px solid var(--line);border-radius:11px;
+    font-family:inherit;font-size:13.5px;color:var(--ink);background:#fff;cursor:pointer;min-width:170px;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%235C7077' stroke-width='2.5'><polyline points='6 9 12 15 18 9'/></svg>");
+    background-repeat:no-repeat;background-position:right 12px center;
+  }
+  select:focus{outline:none;border-color:var(--sky);box-shadow:0 0 0 3px var(--sky-50)}
+
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+  .chip{
+    border:1px solid var(--line);background:#fff;border-radius:999px;
+    padding:6px 13px 6px 11px;font-size:12.5px;cursor:pointer;color:var(--ink);
+    display:inline-flex;align-items:center;gap:7px;transition:all .15s ease;font-family:inherit;
+  }
+  .chip .dot{width:9px;height:9px;border-radius:50%;flex:none}
+  .chip:hover{border-color:var(--sky)}
+  .chip.on{color:#fff;border-color:transparent;font-weight:600}
+  .chip.on .dot{box-shadow:0 0 0 2px rgba(255,255,255,.6)}
+
+  /* stats + reset */
+  .meta-row{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:16px;flex-wrap:wrap}
+  .stats{display:flex;gap:8px;flex-wrap:wrap}
+  .stat{
+    background:#fff;border:1px solid var(--line);border-radius:10px;padding:7px 13px;
+    font-size:13px;color:var(--muted);display:flex;align-items:center;gap:7px;
+  }
+  .stat b{font-family:"Livvic";font-weight:700;color:var(--teal);font-size:16px}
+  .reset{
+    background:transparent;border:1px solid var(--line);border-radius:10px;color:var(--muted);
+    padding:8px 14px;font-family:inherit;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px;
+  }
+  .reset:hover{border-color:var(--orange);color:var(--orange-600)}
+  .reset svg{width:14px;height:14px}
+
+  /* ---------- Cards grid ---------- */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:16px}
+  .pcard{
+    background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    box-shadow:var(--shadow);padding:18px;display:flex;flex-direction:column;gap:11px;
+    border-top:4px solid var(--accent,var(--sky));transition:transform .18s ease, box-shadow .18s ease;
+  }
+  .pcard:hover{transform:translateY(-3px);box-shadow:0 4px 8px rgba(2,60,72,.08),0 16px 36px rgba(2,60,72,.12)}
+  .pcard .theme-tag{display:inline-flex;align-items:center;gap:7px;font-size:11.5px;font-weight:700;color:var(--accent,var(--teal));text-transform:uppercase;letter-spacing:.4px}
+  .pcard .theme-tag .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none}
+  .pcard h3{font-size:17px;font-weight:700;margin:0;color:var(--teal);line-height:1.25}
+  .badges{display:flex;gap:6px;flex-wrap:wrap}
+  .badge{font-size:11px;background:var(--teal-50);color:var(--teal);border-radius:7px;padding:3px 9px;font-weight:600}
+  .badge.geo{background:var(--sky-50);color:#1d4f63}
+  .pcard .desc{font-size:13px;color:var(--muted);margin:0;flex:1}
+  .pcard .contact{display:flex;flex-direction:column;gap:5px;padding-top:11px;border-top:1px solid var(--line);font-size:12.5px}
+  .pcard .contact .line{display:flex;align-items:center;gap:8px;color:var(--ink)}
+  .pcard .contact .line svg{width:14px;height:14px;color:var(--muted);flex:none}
+  .pcard .contact a{word-break:break-word}
+
+  /* empty state */
+  .empty{
+    grid-column:1/-1;text-align:center;padding:64px 20px;color:var(--muted);
+    background:var(--card);border:1px dashed var(--line);border-radius:var(--radius);
+  }
+  .empty svg{width:46px;height:46px;color:var(--sky);margin-bottom:12px}
+  .empty h3{color:var(--teal);margin:0 0 6px;font-size:18px}
+  .empty p{margin:0;font-size:13.5px}
+
+  /* ---------- Map ---------- */
+  #mapWrap{display:none;position:relative;border-radius:var(--radius);overflow:hidden;border:1px solid var(--line);box-shadow:var(--shadow)}
+  #map{height:72vh;min-height:480px;width:100%;background:#dfeaed}
+  .legend{
+    position:absolute;right:14px;bottom:14px;z-index:600;
+    background:rgba(255,255,255,.96);backdrop-filter:blur(4px);
+    border:1px solid var(--line);border-radius:11px;padding:11px 13px;
+    box-shadow:0 6px 18px rgba(2,60,72,.16);max-width:220px;max-height:46vh;overflow:auto;
+  }
+  .legend h4{margin:0 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);font-family:"Livvic";font-weight:700}
+  .legend .li{display:flex;align-items:center;gap:8px;font-size:12px;padding:2px 0;color:var(--ink)}
+  .legend .li .dot{width:11px;height:11px;border-radius:50%;flex:none}
+
+  .leaflet-popup-content-wrapper{border-radius:12px}
+  .leaflet-popup-content{margin:13px 15px;font-family:Verdana,sans-serif}
+  .pop .pt{display:inline-flex;align-items:center;gap:6px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px}
+  .pop .pt .dot{width:8px;height:8px;border-radius:50%}
+  .pop h3{font-family:"Livvic";color:var(--teal);margin:0 0 4px;font-size:15px}
+  .pop .pmeta{font-size:12px;color:var(--muted);margin:0 0 7px}
+  .pop .pdesc{font-size:12px;color:var(--ink);margin:0 0 8px}
+  .pop .pc{font-size:12px;display:block;margin-top:3px}
+
+  footer{max-width:1280px;margin:8px auto 36px;padding:0 22px;color:var(--muted);font-size:12px;text-align:center}
+  footer .src{margin-top:4px}
+
+  .loading{text-align:center;padding:60px;color:var(--muted)}
+  .spinner{width:34px;height:34px;border:3px solid var(--teal-50);border-top-color:var(--teal);border-radius:50%;margin:0 auto 14px;animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  @media (max-width:640px){
+    .topbar-inner{padding:12px 16px}
+    main{padding:16px}
+    .brand h1{font-size:17px}
+    .grid{grid-template-columns:1fr}
+    select{min-width:0;flex:1}
+    .selects{width:100%}
+    .field{flex:1}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none!important;transition:none!important}
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <div class="mark">DSU</div>
+      <div class="titles">
+        <h1>Annuaire des partenaires DSU</h1>
+        <div class="sub">Développement Social Urbain · Groupe Polylogis</div>
+      </div>
+    </div>
+    <div class="topbar-spacer"></div>
+    <div class="seg" role="tablist" aria-label="Affichage">
+      <button id="btnList" class="active" role="tab" aria-selected="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+        Liste
+      </button>
+      <button id="btnMap" role="tab" aria-selected="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
+        Carte
+      </button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div id="banner"></div>
+
+  <section class="controls" aria-label="Filtres">
+    <div class="search-row">
+      <div class="search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input id="q" type="search" placeholder="Rechercher un partenaire, une ville, une activité…" aria-label="Recherche">
+      </div>
+      <div class="selects">
+        <div class="field">
+          <label for="fDept">Département</label>
+          <select id="fDept"><option value="">Tous</option></select>
+        </div>
+        <div class="field">
+          <label for="fEntite">Entité</label>
+          <select id="fEntite"><option value="">Toutes</option></select>
+        </div>
+      </div>
+    </div>
+    <div class="chips" id="chips" aria-label="Thèmes"></div>
+  </section>
+
+  <div class="meta-row">
+    <div class="stats" id="stats"></div>
+    <button class="reset" id="reset">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+      Réinitialiser
+    </button>
+  </div>
+
+  <div id="grid" class="grid"></div>
+
+  <div id="mapWrap">
+    <div id="map"></div>
+    <div class="legend" id="legend"><h4>Thèmes</h4></div>
+  </div>
+</main>
+
+<footer>
+  <div>Annuaire interne · usage réservé aux équipes du Groupe Polylogis</div>
+  <div class="src" id="src"></div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" integrity="sha512-BB3hKbKWOc9Ez/TAwyWxNXeoV9c1v6FIeYiBieIWkpLjauysF18Nzgr1MBNuk8M51z9XFv8U07Wt6gXHbWdfg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js" integrity="sha512-0wmFB1B53XGGsBU/n6vAJ4Vk37Ldnpd1WLb6dr/X7DcdEluKMVjjzVMxgFOyq8FF7hWXNz70pZmPljpr3+CkA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+<script>
+/* =====================================================================
+   CONFIGURATION — branchez votre Google Sheet ici
+   ---------------------------------------------------------------------
+   1. Dans Google Sheets : Fichier ▸ Partager ▸ "Tous les utilisateurs
+      disposant du lien" en lecture.
+   2. Copiez l'identifiant de la feuille depuis son URL :
+      https://docs.google.com/spreadsheets/d/ ICI /edit#gid=0
+   3. Collez-le dans SHEET_ID ci-dessous. Renseignez GID si vos données
+      ne sont pas sur le premier onglet (le gid figure dans l'URL).
+   Tant que SHEET_ID est vide, l'annuaire affiche des données de
+   démonstration.
+   ===================================================================== */
+const SHEET_ID = "1RpDQJinkwkmTmvlLbuPQbZZd33Qb6UJM-HWcqHA0aTA";   // ex : "1RpDQJinkwkmTmvlLbuPQbZZd33Qb6UJM-HWcqHA0aTA"
+const GID      = "0";   // ex : "0"  (laisser vide pour le 1er onglet)
+
+/* Colonnes attendues dans le Google Sheet (1re ligne = en-têtes).
+   La casse et les accents sont ignorés ; plusieurs intitulés sont admis. */
+const FIELD_ALIASES = {
+  nom:        ["nom","partenaire","nom du partenaire","structure","organisme","raison sociale"],
+  theme:      ["theme","thematique","categorie","domaine"],
+  description:["description","activite","mission","objet","presentation"],
+  entite:     ["entite","entite polylogis","entite concernee","esh","bailleur"],
+  departement:["departement","dept","dpt","code departement","n departement","numero departement"],
+  ville:      ["ville","commune"],
+  adresse:    ["adresse"],
+  contact:    ["contact","referent","nom du contact","interlocuteur","responsable"],
+  telephone:  ["telephone","tel","portable","mobile"],
+  email:      ["email","e mail","mail","courriel"],
+  site:       ["site","site web","url","lien","internet"]
+};
+
+/* ---------- Centroïdes des départements français ---------- */
+const DEPTS = {
+"01":["Ain",46.10,5.35],"02":["Aisne",49.55,3.55],"03":["Allier",46.40,3.20],"04":["Alpes-de-Haute-Provence",44.10,6.25],"05":["Hautes-Alpes",44.65,6.25],"06":["Alpes-Maritimes",43.95,7.20],"07":["Ardèche",44.75,4.40],"08":["Ardennes",49.70,4.70],"09":["Ariège",42.95,1.50],"10":["Aube",48.30,4.15],"11":["Aude",43.05,2.55],"12":["Aveyron",44.30,2.55],"13":["Bouches-du-Rhône",43.50,5.10],"14":["Calvados",49.10,-0.25],"15":["Cantal",45.05,2.65],"16":["Charente",45.70,0.20],"17":["Charente-Maritime",45.75,-0.80],"18":["Cher",47.05,2.50],"19":["Corrèze",45.35,1.80],"2A":["Corse-du-Sud",41.85,8.95],"2B":["Haute-Corse",42.40,9.20],"21":["Côte-d'Or",47.45,4.80],"22":["Côtes-d'Armor",48.40,-2.85],"23":["Creuse",46.05,2.05],"24":["Dordogne",45.10,0.70],"25":["Doubs",47.15,6.35],"26":["Drôme",44.70,5.15],"27":["Eure",49.10,0.95],"28":["Eure-et-Loir",48.40,1.35],"29":["Finistère",48.25,-4.05],"30":["Gard",43.95,4.20],"31":["Haute-Garonne",43.35,1.20],"32":["Gers",43.65,0.55],"33":["Gironde",44.85,-0.55],"34":["Hérault",43.60,3.40],"35":["Ille-et-Vilaine",48.15,-1.70],"36":["Indre",46.80,1.60],"37":["Indre-et-Loire",47.25,0.70],"38":["Isère",45.25,5.65],"39":["Jura",46.75,5.75],"40":["Landes",43.95,-0.75],"41":["Loir-et-Cher",47.60,1.35],"42":["Loire",45.75,4.30],"43":["Haute-Loire",45.10,3.85],"44":["Loire-Atlantique",47.30,-1.60],"45":["Loiret",47.90,2.30],"46":["Lot",44.65,1.65],"47":["Lot-et-Garonne",44.35,0.45],"48":["Lozère",44.55,3.50],"49":["Maine-et-Loire",47.40,-0.55],"50":["Manche",49.10,-1.20],"51":["Marne",48.95,4.35],"52":["Haute-Marne",48.10,5.20],"53":["Mayenne",48.30,-0.65],"54":["Meurthe-et-Moselle",48.85,6.15],"55":["Meuse",49.00,5.40],"56":["Morbihan",47.85,-2.80],"57":["Moselle",49.05,6.65],"58":["Nièvre",47.10,3.55],"59":["Nord",50.45,3.25],"60":["Oise",49.40,2.45],"61":["Orne",48.60,0.10],"62":["Pas-de-Calais",50.50,2.30],"63":["Puy-de-Dôme",45.75,3.10],"64":["Pyrénées-Atlantiques",43.25,-0.75],"65":["Hautes-Pyrénées",43.10,0.15],"66":["Pyrénées-Orientales",42.60,2.55],"67":["Bas-Rhin",48.65,7.55],"68":["Haut-Rhin",47.85,7.30],"69":["Rhône",45.85,4.55],"70":["Haute-Saône",47.65,6.15],"71":["Saône-et-Loire",46.65,4.55],"72":["Sarthe",48.00,0.20],"73":["Savoie",45.50,6.45],"74":["Haute-Savoie",46.05,6.35],"75":["Paris",48.8566,2.3522],"76":["Seine-Maritime",49.66,1.00],"77":["Seine-et-Marne",48.60,2.95],"78":["Yvelines",48.80,1.90],"79":["Deux-Sèvres",46.55,-0.30],"80":["Somme",49.95,2.35],"81":["Tarn",43.80,2.15],"82":["Tarn-et-Garonne",44.05,1.30],"83":["Var",43.45,6.20],"84":["Vaucluse",44.05,5.15],"85":["Vendée",46.70,-1.40],"86":["Vienne",46.55,0.45],"87":["Haute-Vienne",45.90,1.25],"88":["Vosges",48.15,6.40],"89":["Yonne",47.85,3.55],"90":["Territoire de Belfort",47.63,6.85],"91":["Essonne",48.50,2.25],"92":["Hauts-de-Seine",48.84,2.24],"93":["Seine-Saint-Denis",48.91,2.48],"94":["Val-de-Marne",48.78,2.46],"95":["Val-d'Oise",49.07,2.13],"971":["Guadeloupe",16.25,-61.55],"972":["Martinique",14.64,-61.02],"973":["Guyane",4.00,-53.00],"974":["La Réunion",-21.13,55.53],"976":["Mayotte",-12.82,45.16]
+};
+
+/* palette des thèmes (assignée dynamiquement) */
+const THEME_PALETTE = ["#EF7C45","#2A9D8F","#80C3E2","#9B5DE5","#E9C46A","#457B9D","#F15BB5","#6A994E","#E76F51","#118AB2","#BC6C25","#8338EC","#06D6A0","#D62828"];
+
+/* ---------- Données de démonstration ---------- */
+const DEMO = [
+  {nom:"Maison de l'Emploi du Grand Paris", theme:"Emploi & insertion", description:"Accompagnement vers l'emploi des habitants des QPV, ateliers CV, mise en relation avec les entreprises locales.", entite:"LogiRep", departement:"93", ville:"Aubervilliers", adresse:"12 rue des Postes", contact:"Sonia Berger", telephone:"01 48 00 00 00", email:"contact@mde-grandparis.fr", site:"https://exemple.fr"},
+  {nom:"Voisins Solidaires 92", theme:"Lien social", description:"Animation du lien de voisinage, fêtes de quartier, lutte contre l'isolement des locataires.", entite:"LogiRep", departement:"92", ville:"Gennevilliers", adresse:"5 av. des Grésillons", contact:"Marc Lefèvre", telephone:"01 47 00 00 00", email:"bonjour@voisins92.org", site:""},
+  {nom:"Réussite Éducative Argenteuil", theme:"Éducation & réussite", description:"Soutien scolaire, accompagnement à la parentalité et ouverture culturelle pour les 6-16 ans.", entite:"LogiRep", departement:"95", ville:"Argenteuil", adresse:"3 place de la Mairie", contact:"Naïma Cherif", telephone:"01 39 00 00 00", email:"contact@re-argenteuil.fr", site:"https://exemple.fr"},
+  {nom:"Médiation Urbaine Seine-Eure", theme:"Médiation & tranquillité", description:"Médiateurs de proximité, gestion des troubles de voisinage et présence dans les halls d'immeubles.", entite:"LogiRep", departement:"27", ville:"Louviers", adresse:"8 rue du Quai", contact:"Yves Marchand", telephone:"02 32 00 00 00", email:"mediation@seine-eure.fr", site:""},
+  {nom:"Bouge ton Quartier", theme:"Sport", description:"Sport de proximité, city-stades animés et tournois inter-quartiers pour les jeunes.", entite:"TMH", departement:"76", ville:"Rouen", adresse:"21 rue Saint-Sever", contact:"Karim Diallo", telephone:"02 35 00 00 00", email:"asso@bougetonquartier.fr", site:"https://exemple.fr"},
+  {nom:"Atelier Numérique Solidaire", theme:"Numérique", description:"Lutte contre la fracture numérique : accès aux droits en ligne, formation aux outils, prêt de matériel.", entite:"LogiOuest", departement:"49", ville:"Angers", adresse:"14 bd Foch", contact:"Élise Tran", telephone:"02 41 00 00 00", email:"contact@numerique-solidaire.fr", site:""},
+  {nom:"Resto du Cœur — Antenne Calvados", theme:"Accès aux droits", description:"Aide alimentaire, accompagnement administratif et orientation sociale des familles.", entite:"LogiOuest", departement:"14", ville:"Caen", adresse:"30 rue de Bayeux", contact:"Paul Girard", telephone:"02 31 00 00 00", email:"caen@exemple.fr", site:"https://exemple.fr"},
+  {nom:"Génération Séniors Centre-Val de Loire", theme:"Séniors", description:"Activités intergénérationnelles, ateliers mémoire et prévention de la perte d'autonomie.", entite:"Scalis", departement:"36", ville:"Châteauroux", adresse:"2 rue Victor Hugo", contact:"Hélène Roy", telephone:"02 54 00 00 00", email:"seniors@exemple.fr", site:""},
+  {nom:"Compagnie du Hall", theme:"Culture", description:"Théâtre et ateliers d'expression menés au pied des immeubles, restitutions publiques en fin de saison.", entite:"TMH", departement:"75", ville:"Paris", adresse:"100 rue de Ménilmontant", contact:"Théo Blanchard", telephone:"01 43 00 00 00", email:"cie@duhall.fr", site:"https://exemple.fr"},
+  {nom:"Maison de Santé du Plateau", theme:"Santé", description:"Permanences d'accès aux soins, ateliers prévention santé et accompagnement vers le droit commun.", entite:"LogiRep", departement:"91", ville:"Grigny", adresse:"7 av. des Tuileries", contact:"Dr. Amine Saïd", telephone:"01 69 00 00 00", email:"accueil@sante-plateau.fr", site:""},
+  {nom:"Promeneurs du Net 77", theme:"Jeunesse", description:"Présence éducative en ligne et accompagnement des projets de jeunes du territoire.", entite:"LogiRep", departement:"77", ville:"Meaux", adresse:"4 rue de la Cité", contact:"Laura Petit", telephone:"01 60 00 00 00", email:"pdn77@exemple.fr", site:""},
+  {nom:"Jardins Partagés de la Manche", theme:"Cadre de vie", description:"Jardins partagés au pied des résidences, animations autour du compostage et de la biodiversité.", entite:"LogiOuest", departement:"50", ville:"Cherbourg-en-Cotentin", adresse:"18 rue des Fossés", contact:"Bruno Lemaire", telephone:"02 33 00 00 00", email:"jardins@exemple.fr", site:"https://exemple.fr"}
+];
+
+/* ===================== Logique de l'application ===================== */
+const norm = s => (s||"").toString().toLowerCase()
+  .normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g," ").trim();
+
+const state = { all:[], themeColors:{}, active:{ q:"", themes:new Set(), dept:"", entite:"" }, view:"list", map:null, layer:null };
+
+/* --- mappe les en-têtes du sheet vers nos champs canoniques --- */
+function buildHeaderMap(headers){
+  const map = {};
+  const nh = headers.map(h => norm(h));
+  for(const [field, aliases] of Object.entries(FIELD_ALIASES)){
+    let idx = -1;
+    for(const a of aliases){ idx = nh.indexOf(norm(a)); if(idx>=0) break; }
+    if(idx<0){ // correspondance partielle
+      idx = nh.findIndex(h => aliases.some(a => h.includes(norm(a)) || norm(a).includes(h)));
+    }
+    if(idx>=0) map[field] = headers[idx];
+  }
+  return map;
+}
+
+/* --- déduit le code département depuis une valeur libre --- */
+function resolveDept(deptRaw, ville){
+  const raw = (deptRaw||"").toString().trim();
+  // code explicite (2A/2B, 2-3 chiffres)
+  let m = raw.match(/\b(2[ab]|97[1-6]|0?[1-9][0-9]?)\b/i);
+  if(m){
+    let c = m[1].toUpperCase();
+    if(/^\d$/.test(c)) c = "0"+c;
+    else if(/^\d\d$/.test(c) && c[0]==="0" && c!=="0") c=c; // garde tel quel
+    if(DEPTS[c]) return c;
+    if(c.length===2 && c[0]==="0" && DEPTS[c[1]]) return c; // fallback
+  }
+  // nom de département
+  const nr = norm(raw);
+  for(const [code,info] of Object.entries(DEPTS)){
+    if(nr && (nr===norm(info[0]) || nr.includes(norm(info[0])))) return code;
+  }
+  return null;
+}
+
+function colorFor(theme){
+  if(state.themeColors[theme]) return state.themeColors[theme];
+  const used = Object.keys(state.themeColors).length;
+  const c = THEME_PALETTE[used % THEME_PALETTE.length];
+  state.themeColors[theme] = c;
+  return c;
+}
+
+/* --- normalise une ligne brute en partenaire --- */
+function toPartner(row, hmap){
+  const get = f => hmap[f]!==undefined ? (row[hmap[f]]||"").toString().trim() : "";
+  const isDemo = !hmap; // les données démo arrivent déjà au bon format
+  const r = isDemo ? row : {
+    nom:get("nom"), theme:get("theme"), description:get("description"), entite:get("entite"),
+    departement:get("departement"), ville:get("ville"), adresse:get("adresse"),
+    contact:get("contact"), telephone:get("telephone"), email:get("email"), site:get("site")
+  };
+  if(!r.nom) return null;
+  r.theme = r.theme || "Non classé";
+  r.deptCode = resolveDept(r.departement, r.ville);
+  r.deptName = r.deptCode ? DEPTS[r.deptCode][0] : (r.departement||"");
+  colorFor(r.theme);
+  return r;
+}
+
+/* ---------- chargement des données ---------- */
+async function loadData(){
+  const banner = document.getElementById("banner");
+  const src = document.getElementById("src");
+  if(!SHEET_ID){
+    state.all = DEMO.map(d => toPartner(d, null)).filter(Boolean);
+    banner.innerHTML = `<div class="banner"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+      <div><b>Mode démonstration.</b> Renseignez <code>SHEET_ID</code> en haut du script pour brancher votre Google Sheet. Les ${state.all.length} fiches ci-dessous sont des exemples.</div></div>`;
+    src.textContent = "Données de démonstration · à remplacer par votre Google Sheet";
+    init();
+    return;
+  }
+  document.getElementById("grid").innerHTML = `<div class="loading"><div class="spinner"></div>Chargement de l'annuaire…</div>`;
+  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv${GID?`&gid=${GID}`:""}`;
+  // Note : /export?format=csv est l'URL publique recommandée (CORS-friendly).
+  // L'ancienne /gviz/tq est bloquée par les navigateurs modernes (CORS).
+  try{
+    const res = await fetch(url);
+    if(!res.ok) throw new Error("HTTP "+res.status);
+    const text = await res.text();
+    const parsed = Papa.parse(text, {header:true, skipEmptyLines:true});
+    const headers = parsed.meta.fields || [];
+    const hmap = buildHeaderMap(headers);
+    if(hmap.nom===undefined) throw new Error("Colonne « Nom » introuvable. Vérifiez les en-têtes du Sheet.");
+    state.all = parsed.data.map(row => toPartner(row, hmap)).filter(Boolean);
+    src.textContent = `${state.all.length} partenaires · source : Google Sheet · actualisé à l'ouverture`;
+    if(!state.all.length){
+      banner.innerHTML = `<div class="banner"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><div>Le Google Sheet est accessible mais ne contient aucune fiche. Ajoutez des lignes sous les en-têtes.</div></div>`;
+    }
+    init();
+  }catch(e){
+    banner.innerHTML = `<div class="banner error"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <div><b>Impossible de charger le Google Sheet.</b> ${e.message}. Vérifiez que la feuille est partagée en lecture « Tous les utilisateurs disposant du lien » et que <code>SHEET_ID</code> est correct.</div></div>`;
+    state.all = DEMO.map(d => toPartner(d, null)).filter(Boolean);
+    src.textContent = "Échec du chargement — affichage des données de démonstration";
+    init();
+  }
+}
+
+/* ---------- construction des filtres ---------- */
+function init(){
+  // thèmes
+  const themes = [...new Set(state.all.map(p=>p.theme))].sort((a,b)=>a.localeCompare(b,"fr"));
+  const chips = document.getElementById("chips");
+  chips.innerHTML = "";
+  themes.forEach(t=>{
+    const c = colorFor(t);
+    const el = document.createElement("button");
+    el.className="chip"; el.type="button";
+    el.style.setProperty("--c",c);
+    el.innerHTML = `<span class="dot" style="background:${c}"></span>${t}`;
+    el.onclick = ()=>{
+      if(state.active.themes.has(t)) state.active.themes.delete(t); else state.active.themes.add(t);
+      el.classList.toggle("on");
+      el.style.background = el.classList.contains("on")? c : "#fff";
+      render();
+    };
+    chips.appendChild(el);
+  });
+
+  // départements présents
+  const fDept = document.getElementById("fDept");
+  fDept.innerHTML = '<option value="">Tous</option>';
+  const deptCodes = [...new Set(state.all.map(p=>p.deptCode).filter(Boolean))]
+    .sort((a,b)=>a.localeCompare(b));
+  deptCodes.forEach(c=>{
+    const o=document.createElement("option"); o.value=c;
+    o.textContent=`${c} — ${DEPTS[c][0]}`; fDept.appendChild(o);
+  });
+
+  // entités présentes
+  const fEnt = document.getElementById("fEntite");
+  fEnt.innerHTML = '<option value="">Toutes</option>';
+  [...new Set(state.all.map(p=>p.entite).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"fr"))
+    .forEach(e=>{ const o=document.createElement("option"); o.value=e; o.textContent=e; fEnt.appendChild(o); });
+
+  render();
+}
+
+/* ---------- filtrage ---------- */
+function filtered(){
+  const {q,themes,dept,entite} = state.active;
+  const nq = norm(q);
+  return state.all.filter(p=>{
+    if(themes.size && !themes.has(p.theme)) return false;
+    if(dept && p.deptCode!==dept) return false;
+    if(entite && p.entite!==entite) return false;
+    if(nq){
+      const hay = norm([p.nom,p.theme,p.ville,p.deptName,p.entite,p.description,p.contact].join(" "));
+      if(!hay.includes(nq)) return false;
+    }
+    return true;
+  });
+}
+
+/* ---------- rendu ---------- */
+const esc = s => (s||"").toString().replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+
+function render(){
+  const list = filtered();
+
+  // stats
+  const nbThemes = new Set(list.map(p=>p.theme)).size;
+  const nbDepts = new Set(list.map(p=>p.deptCode).filter(Boolean)).size;
+  document.getElementById("stats").innerHTML =
+    `<div class="stat"><b>${list.length}</b> partenaire${list.length>1?"s":""}</div>
+     <div class="stat"><b>${nbThemes}</b> thème${nbThemes>1?"s":""}</div>
+     <div class="stat"><b>${nbDepts}</b> département${nbDepts>1?"s":""}</div>`;
+
+  renderGrid(list);
+  if(state.view==="map") renderMap(list);
+}
+
+function renderGrid(list){
+  const grid = document.getElementById("grid");
+  if(!list.length){
+    grid.innerHTML = `<div class="empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <h3>Aucun partenaire ne correspond</h3>
+      <p>Élargissez votre recherche ou réinitialisez les filtres.</p></div>`;
+    return;
+  }
+  grid.innerHTML = list.map(p=>{
+    const c = state.themeColors[p.theme];
+    const geo = [p.ville, p.deptCode?`(${p.deptCode})`:""].filter(Boolean).join(" ");
+    const lines = [];
+    if(p.contact) lines.push(`<div class="line"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>${esc(p.contact)}</div>`);
+    if(p.telephone) lines.push(`<div class="line"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg><a href="tel:${esc(p.telephone.replace(/\s/g,''))}">${esc(p.telephone)}</a></div>`);
+    if(p.email) lines.push(`<div class="line"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/></svg><a href="mailto:${esc(p.email)}">${esc(p.email)}</a></div>`);
+    if(p.site) lines.push(`<div class="line"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg><a href="${esc(p.site)}" target="_blank" rel="noopener">Site web</a></div>`);
+    return `<article class="pcard" style="--accent:${c}">
+      <span class="theme-tag"><span class="dot"></span>${esc(p.theme)}</span>
+      <h3>${esc(p.nom)}</h3>
+      <div class="badges">
+        ${p.entite?`<span class="badge">${esc(p.entite)}</span>`:""}
+        ${geo?`<span class="badge geo">${esc(geo)}</span>`:""}
+      </div>
+      ${p.description?`<p class="desc">${esc(p.description)}</p>`:`<p class="desc"></p>`}
+      ${lines.length?`<div class="contact">${lines.join("")}</div>`:""}
+    </article>`;
+  }).join("");
+}
+
+/* ---------- carte ---------- */
+function ensureMap(){
+  if(state.map) return;
+  state.map = L.map("map",{scrollWheelZoom:true}).setView([48.7,2.4],7);
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",{
+    attribution:'&copy; OpenStreetMap &copy; CARTO', subdomains:"abcd", maxZoom:19
+  }).addTo(state.map);
+  state.layer = L.layerGroup().addTo(state.map);
+}
+
+function renderMap(list){
+  ensureMap();
+  state.layer.clearLayers();
+  // regroupe par département pour répartir les marqueurs sans les superposer
+  const byDept = {};
+  list.forEach(p=>{ if(!p.deptCode) return; (byDept[p.deptCode]=byDept[p.deptCode]||[]).push(p); });
+  const bounds = [];
+  const usedThemes = new Set();
+  Object.entries(byDept).forEach(([code,parts])=>{
+    const [name,lat,lng] = DEPTS[code];
+    parts.forEach((p,i)=>{
+      // disposition en spirale autour du centroïde
+      const n = parts.length;
+      let dlat=0, dlng=0;
+      if(n>1){
+        const ang = (i/n)*Math.PI*2;
+        const rad = 0.06 + 0.025*Math.floor(i/8);
+        dlat = Math.sin(ang)*rad; dlng = Math.cos(ang)*rad;
+      }
+      const c = state.themeColors[p.theme];
+      usedThemes.add(p.theme);
+      const m = L.circleMarker([lat+dlat, lng+dlng],{
+        radius:8, fillColor:c, color:"#fff", weight:2, fillOpacity:.92
+      });
+      const pop = `<div class="pop">
+        <span class="pt" style="color:${c}"><span class="dot" style="background:${c}"></span>${esc(p.theme)}</span>
+        <h3>${esc(p.nom)}</h3>
+        <p class="pmeta">${esc([p.ville, name+" ("+code+")"].filter(Boolean).join(" · "))}${p.entite?" · "+esc(p.entite):""}</p>
+        ${p.description?`<p class="pdesc">${esc(p.description)}</p>`:""}
+        ${p.contact?`<span class="pc">👤 ${esc(p.contact)}</span>`:""}
+        ${p.telephone?`<span class="pc">📞 <a href="tel:${esc(p.telephone.replace(/\s/g,''))}">${esc(p.telephone)}</a></span>`:""}
+        ${p.email?`<span class="pc">✉ <a href="mailto:${esc(p.email)}">${esc(p.email)}</a></span>`:""}
+        ${p.site?`<span class="pc">🔗 <a href="${esc(p.site)}" target="_blank" rel="noopener">Site web</a></span>`:""}
+      </div>`;
+      m.bindPopup(pop);
+      m.addTo(state.layer);
+      bounds.push([lat+dlat,lng+dlng]);
+    });
+  });
+  // légende
+  const legend = document.getElementById("legend");
+  legend.innerHTML = "<h4>Thèmes</h4>" + [...usedThemes].sort((a,b)=>a.localeCompare(b,"fr"))
+    .map(t=>`<div class="li"><span class="dot" style="background:${state.themeColors[t]}"></span>${esc(t)}</div>`).join("");
+  legend.style.display = usedThemes.size ? "block" : "none";
+
+  if(bounds.length){
+    state.map.fitBounds(bounds,{padding:[50,50],maxZoom:11});
+  }
+  setTimeout(()=>state.map.invalidateSize(),60);
+}
+
+/* ---------- bascule de vue ---------- */
+function setView(v){
+  state.view = v;
+  const list = v==="list", map = v==="map";
+  document.getElementById("btnList").classList.toggle("active",list);
+  document.getElementById("btnMap").classList.toggle("active",map);
+  document.getElementById("btnList").setAttribute("aria-selected",list);
+  document.getElementById("btnMap").setAttribute("aria-selected",map);
+  document.getElementById("grid").style.display = list ? "grid" : "none";
+  document.getElementById("mapWrap").style.display = map ? "block" : "none";
+  if(map) renderMap(filtered());
+}
+
+/* ---------- écouteurs ---------- */
+document.getElementById("q").addEventListener("input", e=>{ state.active.q=e.target.value; render(); });
+document.getElementById("fDept").addEventListener("change", e=>{ state.active.dept=e.target.value; render(); });
+document.getElementById("fEntite").addEventListener("change", e=>{ state.active.entite=e.target.value; render(); });
+document.getElementById("btnList").addEventListener("click", ()=>setView("list"));
+document.getElementById("btnMap").addEventListener("click", ()=>setView("map"));
+document.getElementById("reset").addEventListener("click", ()=>{
+  state.active = { q:"", themes:new Set(), dept:"", entite:"" };
+  document.getElementById("q").value="";
+  document.getElementById("fDept").value="";
+  document.getElementById("fEntite").value="";
+  document.querySelectorAll(".chip.on").forEach(c=>{c.classList.remove("on");c.style.background="#fff";});
+  render();
+});
+
+loadData();
+</script>
+</body>
+</html>
