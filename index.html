@@ -558,12 +558,21 @@ function renderGrid(list){
 
 /* ---------- carte ---------- */
 function ensureMap(){
-  if(state.map) return;
-  state.map = L.map("map",{scrollWheelZoom:true}).setView([48.7,2.4],7);
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",{
-    attribution:'&copy; OpenStreetMap &copy; CARTO', subdomains:"abcd", maxZoom:19
+  if(state.map){
+    state.map.invalidateSize();
+    return;
+  }
+  // Petit délai pour que le DOM ait fini d'afficher le conteneur
+  const mapEl = document.getElementById("map");
+  mapEl.style.height = "72vh";
+  state.map = L.map("map", {scrollWheelZoom:true, preferCanvas:true});
+  state.map.setView([46.8, 2.3], 6);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    maxZoom:19
   }).addTo(state.map);
   state.layer = L.layerGroup().addTo(state.map);
+  setTimeout(()=>state.map.invalidateSize(), 100);
 }
 
 // Cache géocodage pour éviter les requêtes répétées
@@ -593,6 +602,10 @@ async function geocode(p){
 async function renderMap(list){
   ensureMap();
   state.layer.clearLayers();
+
+  // Forcer Leaflet à recalculer la taille du conteneur
+  state.map.invalidateSize();
+
   const bounds = [];
   const usedThemes = new Set();
 
@@ -640,8 +653,8 @@ async function renderMap(list){
   if(bounds.length){
     state.map.fitBounds(bounds,{padding:[50,50],maxZoom:13});
   }
-  setTimeout(()=>state.map.invalidateSize(), 200);
-  setTimeout(()=>state.map.invalidateSize(), 600);
+  setTimeout(()=>state.map.invalidateSize(), 300);
+  setTimeout(()=>state.map.invalidateSize(), 800);
 }
 
 /* ---------- bascule de vue ---------- */
@@ -656,8 +669,10 @@ function setView(v){
   const mapWrap = document.getElementById("mapWrap");
   mapWrap.style.display = isMap ? "block" : "none";
   if(isMap){
-    // Laisser le DOM afficher le conteneur avant d'initialiser Leaflet
-    requestAnimationFrame(()=>{ renderMap(filtered()); });
+    // Double rAF : garantit que le navigateur a peint le conteneur avant Leaflet
+    requestAnimationFrame(()=>{
+      requestAnimationFrame(()=>{ renderMap(filtered()); });
+    });
   }
 }
 
