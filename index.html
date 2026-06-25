@@ -615,10 +615,25 @@ async function renderMap(list){
   // Initialiser Leaflet maintenant que le conteneur est visible et dimensionné
   state.map = L.map("map", { scrollWheelZoom:true });
   state.map.setView([46.8, 2.3], 6);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    maxZoom:19
-  }).addTo(state.map);
+
+  // Plusieurs fournisseurs de tuiles en fallback automatique
+  const tileSources = [
+    { url:"https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", sub:"abcd", attr:"&copy; CARTO &copy; OSM" },
+    { url:"https://tile.openstreetmap.org/{z}/{x}/{y}.png", attr:"&copy; OpenStreetMap" },
+    { url:"https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png", sub:"a", attr:"&copy; OSM France" },
+  ];
+  let tileIdx = 0;
+  function tryNextTile(){
+    if(tileIdx >= tileSources.length) return;
+    const s = tileSources[tileIdx++];
+    const opts = { attribution: s.attr, maxZoom:19 };
+    if(s.sub) opts.subdomains = s.sub;
+    const tl = L.tileLayer(s.url, opts);
+    tl.on("tileerror", ()=>{ state.map.removeLayer(tl); tryNextTile(); });
+    tl.addTo(state.map);
+  }
+  tryNextTile();
+
   state.layer = L.layerGroup().addTo(state.map);
 
   const bounds = [];
