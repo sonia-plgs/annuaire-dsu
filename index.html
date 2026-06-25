@@ -177,8 +177,8 @@
   .empty p{margin:0;font-size:13.5px}
 
   /* ---------- Map ---------- */
-  #mapWrap{display:none;position:relative;border-radius:var(--radius);overflow:hidden;border:1px solid var(--line);box-shadow:var(--shadow)}
-  #map{height:72vh;min-height:480px;width:100%;background:#dfeaed}
+  #mapWrap{display:none;position:relative;border-radius:var(--radius);border:1px solid var(--line);box-shadow:var(--shadow)}
+  #map{height:72vh;min-height:480px;width:100%;background:#dfeaed;border-radius:var(--radius)}
   .legend{
     position:absolute;right:14px;bottom:14px;z-index:600;
     background:rgba(255,255,255,.96);backdrop-filter:blur(4px);
@@ -566,68 +566,99 @@ function ensureMap(){
   state.layer = L.layerGroup().addTo(state.map);
 }
 
-function renderMap(list){
+// Cache géocodage pour éviter les requêtes répétées
+const _geocache = {};
+
+async function geocode(p){
+  const q = [p.adresse, p.ville, p.departement].filter(Boolean).join(" ");
+  if(!q) return null;
+  if(_geocache[q]) return _geocache[q];
+  try{
+    const r = await fetch(`https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(q)}&limit=1`);
+    const d = await r.json();
+    if(d.features && d.features.length){
+      const [lng,lat] = d.features[0].geometry.coordinates;
+      _geocache[q] = {lat,lng};
+      return {lat,lng};
+    }
+  }catch(e){}
+  // fallback centroïde département
+  if(p.deptCode && DEPTS[p.deptCode]){
+    const [,lat,lng] = DEPTS[p.deptCode];
+    return {lat,lng};
+  }
+  return null;
+}
+
+async function renderMap(list){
   ensureMap();
   state.layer.clearLayers();
-  // regroupe par département pour répartir les marqueurs sans les superposer
-  const byDept = {};
-  list.forEach(p=>{ if(!p.deptCode) return; (byDept[p.deptCode]=byDept[p.deptCode]||[]).push(p); });
   const bounds = [];
   const usedThemes = new Set();
-  Object.entries(byDept).forEach(([code,parts])=>{
-    const [name,lat,lng] = DEPTS[code];
-    parts.forEach((p,i)=>{
-      // disposition en spirale autour du centroïde
-      const n = parts.length;
-      let dlat=0, dlng=0;
-      if(n>1){
-        const ang = (i/n)*Math.PI*2;
-        const rad = 0.06 + 0.025*Math.floor(i/8);
-        dlat = Math.sin(ang)*rad; dlng = Math.cos(ang)*rad;
-      }
-      const c = state.themeColors[p.theme];
-      usedThemes.add(p.theme);
-      const m = L.circleMarker([lat+dlat, lng+dlng],{
-        radius:8, fillColor:c, color:"#fff", weight:2, fillOpacity:.92
-      });
-      const pop = `<div class="pop">
-        <span class="pt" style="color:${c}"><span class="dot" style="background:${c}"></span>${esc(p.theme)}</span>
-        <h3>${esc(p.nom)}</h3>
-        <p class="pmeta">${esc([p.ville, name+" ("+code+")"].filter(Boolean).join(" · "))}${p.entite?" · "+esc(p.entite):""}</p>
-        ${p.description?`<p class="pdesc">${esc(p.description)}</p>`:""}
-        ${p.contact?`<span class="pc">👤 ${esc(p.contact)}</span>`:""}
-        ${p.telephone?`<span class="pc">📞 <a href="tel:${esc(p.telephone.replace(/\s/g,''))}">${esc(p.telephone)}</a></span>`:""}
-        ${p.email?`<span class="pc">✉ <a href="mailto:${esc(p.email)}">${esc(p.email)}</a></span>`:""}
-        ${p.site?`<span class="pc">🔗 <a href="${esc(p.site)}" target="_blank" rel="noopener">Site web</a></span>`:""}
-      </div>`;
-      m.bindPopup(pop);
-      m.addTo(state.layer);
-      bounds.push([lat+dlat,lng+dlng]);
+
+  // Indicateur de chargement
+  const mapWrap = document.getElementById("mapWrap");
+  const loader = document.createElement("div");
+  loader.id = "mapLoader";
+  loader.style.cssText = "position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:1000;background:rgba(255,255,255,.92);padding:6px 16px;border-radius:20px;font-size:.85rem;color:#023c48;box-shadow:0 2px 8px rgba(0,0,0,.15)";
+  loader.textContent = "Géolocalisation en cours…";
+  mapWrap.appendChild(loader);
+
+  await Promise.all(list.map(async p=>{
+    const coords = await geocode(p);
+    if(!coords) return;
+    const c = state.themeColors[p.theme];
+    usedThemes.add(p.theme);
+    const m = L.circleMarker([coords.lat, coords.lng],{
+      radius:8, fillColor:c, color:"#fff", weight:2, fillOpacity:.92
     });
-  });
+    const deptLabel = p.deptCode && DEPTS[p.deptCode] ? DEPTS[p.deptCode][0]+" ("+p.deptCode+")" : p.departement;
+    const pop = `<div class="pop">
+      <span class="pt" style="color:${c}"><span class="dot" style="background:${c}"></span>${esc(p.theme)}</span>
+      <h3>${esc(p.nom)}</h3>
+      <p class="pmeta">${esc([p.adresse, p.ville, deptLabel].filter(Boolean).join(" · "))}${p.entite?" · "+esc(p.entite):""}</p>
+      ${p.description?`<p class="pdesc">${esc(p.description)}</p>`:""}
+      ${p.contact?`<span class="pc">👤 ${esc(p.contact)}</span>`:""}
+      ${p.telephone?`<span class="pc">📞 <a href="tel:${esc(p.telephone.replace(/\s/g,''))}">${esc(p.telephone)}</a></span>`:""}
+      ${p.email?`<span class="pc">✉ <a href="mailto:${esc(p.email)}">${esc(p.email)}</a></span>`:""}
+      ${p.site?`<span class="pc">🔗 <a href="${esc(p.site)}" target="_blank" rel="noopener">Site web</a></span>`:""}
+    </div>`;
+    m.bindPopup(pop);
+    m.addTo(state.layer);
+    bounds.push([coords.lat, coords.lng]);
+  }));
+
+  loader.remove();
+
   // légende
   const legend = document.getElementById("legend");
   legend.innerHTML = "<h4>Thèmes</h4>" + [...usedThemes].sort((a,b)=>a.localeCompare(b,"fr"))
     .map(t=>`<div class="li"><span class="dot" style="background:${state.themeColors[t]}"></span>${esc(t)}</div>`).join("");
   legend.style.display = usedThemes.size ? "block" : "none";
 
+  state.map.invalidateSize();
   if(bounds.length){
-    state.map.fitBounds(bounds,{padding:[50,50],maxZoom:11});
+    state.map.fitBounds(bounds,{padding:[50,50],maxZoom:13});
   }
-  setTimeout(()=>state.map.invalidateSize(),60);
+  setTimeout(()=>state.map.invalidateSize(), 200);
+  setTimeout(()=>state.map.invalidateSize(), 600);
 }
 
 /* ---------- bascule de vue ---------- */
 function setView(v){
   state.view = v;
-  const list = v==="list", map = v==="map";
-  document.getElementById("btnList").classList.toggle("active",list);
-  document.getElementById("btnMap").classList.toggle("active",map);
-  document.getElementById("btnList").setAttribute("aria-selected",list);
-  document.getElementById("btnMap").setAttribute("aria-selected",map);
-  document.getElementById("grid").style.display = list ? "grid" : "none";
-  document.getElementById("mapWrap").style.display = map ? "block" : "none";
-  if(map) renderMap(filtered());
+  const isList = v==="list", isMap = v==="map";
+  document.getElementById("btnList").classList.toggle("active",isList);
+  document.getElementById("btnMap").classList.toggle("active",isMap);
+  document.getElementById("btnList").setAttribute("aria-selected",isList);
+  document.getElementById("btnMap").setAttribute("aria-selected",isMap);
+  document.getElementById("grid").style.display = isList ? "grid" : "none";
+  const mapWrap = document.getElementById("mapWrap");
+  mapWrap.style.display = isMap ? "block" : "none";
+  if(isMap){
+    // Laisser le DOM afficher le conteneur avant d'initialiser Leaflet
+    requestAnimationFrame(()=>{ renderMap(filtered()); });
+  }
 }
 
 /* ---------- écouteurs ---------- */
