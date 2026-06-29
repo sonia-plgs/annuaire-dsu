@@ -9,7 +9,6 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Livvic:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" integrity="sha512-h9FcoyWjHcOcmEVkxOfTLnmZFWIH0iZhZT1H2TbOq55xssQGEJHEaIm+PgoUaZbRvQTNTluNOEfb1ZRy6D3BOw==" crossorigin="anonymous" referrerpolicy="no-referrer">
 
 <style>
   :root{
@@ -189,14 +188,22 @@
   .legend .li{display:flex;align-items:center;gap:8px;font-size:12px;padding:2px 0;color:var(--ink)}
   .legend .li .dot{width:11px;height:11px;border-radius:50%;flex:none}
 
-  .leaflet-popup-content-wrapper{border-radius:12px}
-  .leaflet-popup-content{margin:13px 15px;font-family:Verdana,sans-serif}
+  /* Popup SVG carte */
+  #svgMap{width:100%;height:72vh;min-height:480px;display:block;cursor:grab}
+  #svgMap:active{cursor:grabbing}
+  #mapPopup{
+    position:absolute;z-index:700;background:#fff;border-radius:12px;
+    padding:13px 15px;box-shadow:0 6px 24px rgba(2,60,72,.2);
+    border:1px solid var(--line);max-width:270px;display:none;pointer-events:none;
+  }
+  #mapPopup.visible{display:block}
   .pop .pt{display:inline-flex;align-items:center;gap:6px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px}
-  .pop .pt .dot{width:8px;height:8px;border-radius:50%}
+  .pop .pt .dot{width:8px;height:8px;border-radius:50%;flex:none}
   .pop h3{font-family:"Livvic";color:var(--teal);margin:0 0 4px;font-size:15px}
   .pop .pmeta{font-size:12px;color:var(--muted);margin:0 0 7px}
   .pop .pdesc{font-size:12px;color:var(--ink);margin:0 0 8px}
   .pop .pc{font-size:12px;display:block;margin-top:3px}
+  .pop a{color:var(--teal)}
 
   footer{max-width:1280px;margin:8px auto 36px;padding:0 22px;color:var(--muted);font-size:12px;text-align:center}
   footer .src{margin-top:4px}
@@ -278,7 +285,8 @@
   <div id="grid" class="grid"></div>
 
   <div id="mapWrap">
-    <div id="map"></div>
+    <svg id="svgMap"></svg>
+    <div id="mapPopup"></div>
     <div class="legend" id="legend"><h4>Thèmes</h4></div>
   </div>
 </main>
@@ -288,7 +296,7 @@
   <div class="src" id="src"></div>
 </footer>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" integrity="sha512-BB3hKbKWOc9Ez/TAwyWxNXeoV9c1v6FIeYiBieIWkpLjauysF18Nzgr1MBNuk8M51z9XFv8U07Wt6gXHbWdfg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
 <script>
@@ -556,9 +564,8 @@ function renderGrid(list){
   }).join("");
 }
 
-/* ---------- carte ---------- */
+/* ---------- carte SVG autonome (D3 + GeoJSON simplifié) ---------- */
 
-// Cache géocodage pour éviter les requêtes répétées
 const _geocache = {};
 
 async function geocode(p){
@@ -574,7 +581,6 @@ async function geocode(p){
       return {lat,lng};
     }
   }catch(e){}
-  // fallback centroïde département
   if(p.deptCode && DEPTS[p.deptCode]){
     const [,lat,lng] = DEPTS[p.deptCode];
     return {lat,lng};
@@ -582,72 +588,94 @@ async function geocode(p){
   return null;
 }
 
+// GeoJSON ultra-simplifié des contours des départements français (métropole)
+// Source : naturalearthdata / OpenData gouv — simplifié pour embarquement inline
+const FRANCE_GEO_URL = "https://raw.githubusercontent.com/gregoiredavid/france-geojson/master/departements-version-simplifiee.geojson";
+let _geoCache = null;
+
+async function loadGeo(){
+  if(_geoCache) return _geoCache;
+  try{
+    const r = await fetch(FRANCE_GEO_URL);
+    _geoCache = await r.json();
+  }catch(e){
+    // Fallback : carte vide avec juste les points
+    _geoCache = {type:"FeatureCollection", features:[]};
+  }
+  return _geoCache;
+}
+
 async function renderMap(list){
   const mapWrap = document.getElementById("mapWrap");
 
-  // Détruire l'instance Leaflet précédente proprement
-  if(state.map){
-    state.map.remove();
-    state.map = null;
-    state.layer = null;
+  // Loader
+  let loader = document.getElementById("mapLoader");
+  if(!loader){
+    loader = document.createElement("div");
+    loader.id = "mapLoader";
+    loader.style.cssText = "position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:1000;background:rgba(255,255,255,.92);padding:6px 16px;border-radius:20px;font-size:.85rem;color:#023c48;box-shadow:0 2px 8px rgba(0,0,0,.15)";
+    mapWrap.appendChild(loader);
   }
+  loader.textContent = "Chargement de la carte…";
+  loader.style.display = "block";
 
-  // Recréer un élément #map vierge (Leaflet garde des traces dans le DOM)
-  const oldMap = document.getElementById("map");
-  const newMap = document.createElement("div");
-  newMap.id = "map";
-  newMap.style.cssText = "height:72vh;min-height:480px;width:100%;background:#dfeaed;border-radius:14px";
-  oldMap.replaceWith(newMap);
-
-  // Indicateur de chargement pendant le géocodage
-  const loader = document.createElement("div");
-  loader.style.cssText = "position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:1000;background:rgba(255,255,255,.92);padding:6px 16px;border-radius:20px;font-size:.85rem;color:#023c48;box-shadow:0 2px 8px rgba(0,0,0,.15)";
-  loader.textContent = "Géolocalisation en cours…";
-  mapWrap.appendChild(loader);
-
-  // Géocoder d'abord tous les partenaires, AVANT d'initialiser la carte
-  const results = await Promise.all(list.map(async p => {
-    const coords = await geocode(p);
-    return { p, coords };
-  }));
+  // Charger le GeoJSON et géocoder en parallèle
+  const [geo, results] = await Promise.all([
+    loadGeo(),
+    Promise.all(list.map(async p => ({ p, coords: await geocode(p) })))
+  ]);
   loader.remove();
 
-  // Initialiser Leaflet maintenant que le conteneur est visible et dimensionné
-  state.map = L.map("map", { scrollWheelZoom:true });
-  state.map.setView([46.8, 2.3], 6);
+  // Dimensions
+  const svg = document.getElementById("svgMap");
+  const W = svg.clientWidth || 800;
+  const H = svg.clientHeight || 520;
 
-  // Plusieurs fournisseurs de tuiles en fallback automatique
-  const tileSources = [
-    { url:"https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", sub:"abcd", attr:"&copy; CARTO &copy; OSM" },
-    { url:"https://tile.openstreetmap.org/{z}/{x}/{y}.png", attr:"&copy; OpenStreetMap" },
-    { url:"https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png", sub:"a", attr:"&copy; OSM France" },
-  ];
-  let tileIdx = 0;
-  function tryNextTile(){
-    if(tileIdx >= tileSources.length) return;
-    const s = tileSources[tileIdx++];
-    const opts = { attribution: s.attr, maxZoom:19 };
-    if(s.sub) opts.subdomains = s.sub;
-    const tl = L.tileLayer(s.url, opts);
-    tl.on("tileerror", ()=>{ state.map.removeLayer(tl); tryNextTile(); });
-    tl.addTo(state.map);
-  }
-  tryNextTile();
+  // Projection centrée sur la France métropolitaine
+  const projection = d3.geoConicConformal()
+    .center([2.454071, 46.279229])
+    .scale(2800)
+    .translate([W/2, H/2]);
+  const path = d3.geoPath().projection(projection);
 
-  state.layer = L.layerGroup().addTo(state.map);
+  // Vider et redessiner
+  const svgEl = d3.select("#svgMap");
+  svgEl.selectAll("*").remove();
 
-  const bounds = [];
+  const g = svgEl.append("g");
+
+  // Fond et contours départements
+  g.selectAll("path.dept")
+    .data(geo.features)
+    .enter().append("path")
+    .attr("class","dept")
+    .attr("d", path)
+    .attr("fill","#e8f0f2")
+    .attr("stroke","#b0c8cf")
+    .attr("stroke-width","0.6");
+
+  // Points partenaires
+  const popup = document.getElementById("mapPopup");
   const usedThemes = new Set();
 
   results.forEach(({p, coords}) => {
     if(!coords) return;
     const c = state.themeColors[p.theme];
     usedThemes.add(p.theme);
-    const m = L.circleMarker([coords.lat, coords.lng], {
-      radius:9, fillColor:c, color:"#fff", weight:2, fillOpacity:.92
-    });
+    const [x, y] = projection([coords.lng, coords.lat]);
+    if(!x || !y) return;
+
+    const circle = g.append("circle")
+      .attr("cx", x).attr("cy", y)
+      .attr("r", 9)
+      .attr("fill", c)
+      .attr("stroke","#fff")
+      .attr("stroke-width","2")
+      .attr("opacity","0.92")
+      .style("cursor","pointer");
+
     const deptLabel = p.deptCode && DEPTS[p.deptCode] ? DEPTS[p.deptCode][0]+" ("+p.deptCode+")" : p.departement;
-    const pop = `<div class="pop">
+    const popHtml = `<div class="pop">
       <span class="pt" style="color:${c}"><span class="dot" style="background:${c}"></span>${esc(p.theme)}</span>
       <h3>${esc(p.nom)}</h3>
       <p class="pmeta">${esc([p.adresse, p.ville, deptLabel].filter(Boolean).join(" · "))}${p.entite?" · "+esc(p.entite):""}</p>
@@ -657,20 +685,39 @@ async function renderMap(list){
       ${p.email?`<span class="pc">✉ <a href="mailto:${esc(p.email)}">${esc(p.email)}</a></span>`:""}
       ${p.site?`<span class="pc">🔗 <a href="${esc(p.site)}" target="_blank" rel="noopener">Site web</a></span>`:""}
     </div>`;
-    m.bindPopup(pop);
-    m.addTo(state.layer);
-    bounds.push([coords.lat, coords.lng]);
+
+    circle.on("mouseenter", function(event){
+      d3.select(this).attr("r",12).attr("stroke-width","3");
+      popup.innerHTML = popHtml;
+      popup.classList.add("visible");
+      // Positionner le popup
+      const rect = svg.getBoundingClientRect();
+      const wrapRect = mapWrap.getBoundingClientRect();
+      let px = event.clientX - wrapRect.left + 12;
+      let py = event.clientY - wrapRect.top - 10;
+      if(px + 280 > wrapRect.width) px = px - 300;
+      popup.style.left = px + "px";
+      popup.style.top = py + "px";
+      popup.style.pointerEvents = "auto";
+    });
+    circle.on("mouseleave", function(){
+      d3.select(this).attr("r",9).attr("stroke-width","2");
+      popup.classList.remove("visible");
+      popup.style.pointerEvents = "none";
+    });
   });
 
-  // légende
+  // Zoom + pan
+  const zoom = d3.zoom()
+    .scaleExtent([0.8, 12])
+    .on("zoom", e => g.attr("transform", e.transform));
+  svgEl.call(zoom);
+
+  // Légende
   const legend = document.getElementById("legend");
   legend.innerHTML = "<h4>Thèmes</h4>" + [...usedThemes].sort((a,b)=>a.localeCompare(b,"fr"))
     .map(t=>`<div class="li"><span class="dot" style="background:${state.themeColors[t]}"></span>${esc(t)}</div>`).join("");
   legend.style.display = usedThemes.size ? "block" : "none";
-
-  if(bounds.length){
-    state.map.fitBounds(bounds, {padding:[50,50], maxZoom:13});
-  }
 }
 
 /* ---------- bascule de vue ---------- */
