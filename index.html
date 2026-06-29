@@ -658,22 +658,36 @@ async function renderMap(list){
   const popup = document.getElementById("mapPopup");
   const usedThemes = new Set();
 
-  results.forEach(({p, coords}) => {
-    if(!coords) return;
-    const c = state.themeColors[p.theme];
-    usedThemes.add(p.theme);
+  // Grouper les points par position (arrondie à 2 décimales) pour détecter les superpositions
+  const posMap = new Map();
+  const validResults = results.filter(({coords}) => coords);
+  validResults.forEach(({p, coords}) => {
     const [x, y] = projection([coords.lng, coords.lat]);
     if(!x || !y) return;
+    const key = `${Math.round(x*100)}_${Math.round(y*100)}`;
+    if(!posMap.has(key)) posMap.set(key, []);
+    posMap.get(key).push({p, x, y});
+  });
 
-    const circle = g.append("circle")
-      .attr("cx", x).attr("cy", y)
-      .attr("r", 9)
-      .attr("fill", c)
-      .attr("stroke","#fff")
-      .attr("stroke-width","2")
-      .attr("opacity","0.92")
-      .style("cursor","pointer");
+  // Garder trace des groupes éclatés
+  const explodedGroups = new Set();
 
+  function showPopup(event, popHtml){
+    popup.innerHTML = popHtml;
+    popup.classList.add("visible");
+    const wrapRect = mapWrap.getBoundingClientRect();
+    let px = event.clientX - wrapRect.left + 14;
+    let py = event.clientY - wrapRect.top - 10;
+    if(px + 290 > wrapRect.width) px = px - 310;
+    if(py < 0) py = 4;
+    popup.style.left = px + "px";
+    popup.style.top = py + "px";
+    popup.style.pointerEvents = "auto";
+  }
+
+  function addCircle(gEl, x, y, p, origKey){
+    const c = state.themeColors[p.theme];
+    usedThemes.add(p.theme);
     const deptLabel = p.deptCode && DEPTS[p.deptCode] ? DEPTS[p.deptCode][0]+" ("+p.deptCode+")" : p.departement;
     const popHtml = `<div class="pop">
       <span class="pt" style="color:${c}"><span class="dot" style="background:${c}"></span>${esc(p.theme)}</span>
@@ -686,32 +700,124 @@ async function renderMap(list){
       ${p.site?`<span class="pc">🔗 <a href="${esc(p.site)}" target="_blank" rel="noopener">Site web</a></span>`:""}
     </div>`;
 
+    const circle = gEl.append("circle")
+      .attr("cx", x).attr("cy", y).attr("r", 9)
+      .attr("fill", c).attr("stroke","#fff").attr("stroke-width","2")
+      .attr("opacity","0.92").style("cursor","pointer")
+      .datum({x, y, origKey});
+
     circle.on("mouseenter", function(event){
       d3.select(this).attr("r",12).attr("stroke-width","3");
-      popup.innerHTML = popHtml;
-      popup.classList.add("visible");
-      // Positionner le popup
-      const rect = svg.getBoundingClientRect();
-      const wrapRect = mapWrap.getBoundingClientRect();
-      let px = event.clientX - wrapRect.left + 12;
-      let py = event.clientY - wrapRect.top - 10;
-      if(px + 280 > wrapRect.width) px = px - 300;
-      popup.style.left = px + "px";
-      popup.style.top = py + "px";
-      popup.style.pointerEvents = "auto";
+      showPopup(event, popHtml);
     });
     circle.on("mouseleave", function(){
       d3.select(this).attr("r",9).attr("stroke-width","2");
       popup.classList.remove("visible");
       popup.style.pointerEvents = "none";
     });
+    return circle;
+  }
+
+  // Dessiner les points — badges de comptage pour les groupes, points simples sinon
+  posMap.forEach((items, key) => {
+    const {x, y} = items[0];
+    if(items.length === 1){
+      addCircle(g, x, y, items[0].p, key);
+    } else {
+      // Badge de groupe : cercle avec le nombre
+      const badgeR = 13;
+      const badge = g.append("g").attr("class","badge-group").attr("data-key", key)
+        .style("cursor","pointer");
+
+      badge.append("circle")
+        .attr("cx",x).attr("cy",y).attr("r",badgeR)
+        .attr("fill","var(--teal)").attr("stroke","#fff").attr("stroke-width","2.5");
+      badge.append("text")
+        .attr("x",x).attr("y",y+1)
+        .attr("text-anchor","middle").attr("dominant-baseline","middle")
+        .attr("fill","#fff").attr("font-size","11").attr("font-weight","700")
+        .attr("pointer-events","none")
+        .text(items.length);
+
+      // Clic → éclater en étoile
+      badge.on("click", function(event){
+        event.stopPropagation();
+        if(explodedGroups.has(key)) return;
+        explodedGroups.add(key);
+        badge.remove();
+
+        const n = items.length;
+        const spreadR = Math.max(28, n * 10);
+        items.forEach(({p, x:cx, y:cy}, i) => {
+          const angle = (2 * Math.PI * i / n) - Math.PI/2;
+          const tx = cx + spreadR * Math.cos(angle);
+          const ty = cy + spreadR * Math.sin(angle);
+          // Ligne de liaison
+          g.append("line")
+            .attr("x1",cx).attr("y1",cy).attr("x2",cx).attr("y2",cy)
+            .attr("stroke","#ccc").attr("stroke-width","1").attr("opacity","0.7")
+            .attr("class","explode-line")
+            .transition().duration(350)
+            .attr("x2",tx).attr("y2",ty);
+          // Point
+          const circ = addCircle(g, cx, cy, p, key);
+          circ.transition().duration(350)
+            .attr("cx",tx).attr("cy",ty);
+        });
+      });
+
+      badge.on("mouseenter", function(){
+        badge.select("circle").attr("r", badgeR+2);
+      });
+      badge.on("mouseleave", function(){
+        badge.select("circle").attr("r", badgeR);
+      });
+    }
   });
 
-  // Zoom + pan
+  // Clic sur fond → refermer tous les groupes éclatés
+  svgEl.on("click", function(){
+    if(explodedGroups.size === 0) return;
+    explodedGroups.clear();
+    renderMap(list);
+  });
+
+  // Zoom + pan (molette souris ou pinch)
   const zoom = d3.zoom()
-    .scaleExtent([0.8, 12])
-    .on("zoom", e => g.attr("transform", e.transform));
+    .scaleExtent([0.8, 20])
+    .on("zoom", e => {
+      g.attr("transform", e.transform);
+      // Réduire la taille des cercles et badges au zoom
+      const k = e.transform.k;
+      g.selectAll("circle:not(.badge-group circle)").attr("r", d => 9/Math.sqrt(k));
+      g.selectAll(".badge-group circle").attr("r", 13/Math.sqrt(k));
+      g.selectAll(".badge-group text").attr("font-size", 11/Math.sqrt(k));
+    });
   svgEl.call(zoom);
+
+  // Boutons zoom +/-
+  let _zoomBtns = document.getElementById("zoomBtns");
+  if(_zoomBtns) _zoomBtns.remove();
+  _zoomBtns = document.createElement("div");
+  _zoomBtns.id = "zoomBtns";
+  _zoomBtns.style.cssText = "position:absolute;top:12px;right:14px;z-index:600;display:flex;flex-direction:column;gap:4px";
+  mapWrap.appendChild(_zoomBtns);
+
+  const btnStyle = "width:32px;height:32px;border:1px solid var(--line);background:#fff;border-radius:8px;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.1);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:500;color:var(--teal)";
+  [["+",.5],["−",-.5],["⊙",0]].forEach(([label, delta]) => {
+    const btn = document.createElement("button");
+    btn.textContent = label;
+    btn.title = delta > 0 ? "Zoom +" : delta < 0 ? "Zoom −" : "Réinitialiser";
+    btn.style.cssText = btnStyle;
+    btn.addEventListener("click", () => {
+      if(delta === 0){
+        svgEl.transition().duration(400).call(zoom.transform, d3.zoomIdentity);
+      } else {
+        svgEl.transition().duration(300).call(zoom.scaleBy, 1 + delta * 2);
+      }
+    });
+    _zoomBtns.appendChild(btn);
+  });
 
   // Légende
   const legend = document.getElementById("legend");
